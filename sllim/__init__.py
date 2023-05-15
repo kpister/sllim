@@ -9,8 +9,8 @@ def set_key(key):
     openai.api_key = key
 
 def cache(fn):
-    folder_name = "." + fn.__name__
-    cache_file = os.path.join(folder_name, "cache.json")
+    folder_name = ".cache"
+    cache_file = os.path.join(folder_name, f"{fn.__name__}.json")
     if not os.path.exists(cache_file):
         os.makedirs(folder_name, exist_ok=True)
         with open(cache_file, "w") as w:

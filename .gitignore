@@ -1,3 +1,4 @@
+.cache
 dist
 __pycache__
 settings.json
