@@ -44,7 +44,7 @@ def catch(fn):
             time.sleep(1)
             return fn(*args, **kwargs)
         except openai.APIError as e:
-            if e.code == 502:
+            if e.code >= 500:
                 print("API error")
                 time.sleep(1)
                 return fn(*args, **kwargs)
