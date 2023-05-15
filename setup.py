@@ -8,7 +8,9 @@ import os
 
 from setuptools import setup
 
-with codecs.open(os.path.join(os.path.dirname(__file__), "README.md"), encoding="utf-8") as fh:
+with codecs.open(
+    os.path.join(os.path.dirname(__file__), "README.md"), encoding="utf-8"
+) as fh:
     long_description = "\n" + fh.read()
 
 setup(
@@ -17,7 +19,9 @@ setup(
     author="Kaiser Pister",
     author_email="kaiser@pister.dev",
     packages=["sllim"],
-    package_data={"": ["LICENSE"],},
+    package_data={
+        "": ["LICENSE"],
+    },
     url="https://github.com/kpister/sllim",
     license="MIT",
     classifiers=[
