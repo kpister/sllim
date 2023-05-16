@@ -60,7 +60,7 @@ def catch(fn):
 def chat(
     messages,
     model="gpt-3.5-turbo",
-    max_tokens: int = 16,
+    max_tokens: int = 256,
     temperature: float = 1,
     top_p: float = 1,
     n: int = 1,
