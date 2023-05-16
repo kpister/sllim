@@ -1,6 +1,7 @@
 import os
 import json
 import time
+from typing import Optional
 
 import openai
 import tiktoken
@@ -56,16 +57,66 @@ def catch(fn):
 
 @catch
 @cache
-def chat(messages, model="gpt-3.5-turbo"):
-    response = openai.ChatCompletion.create(model=model, messages=messages)
+def chat(
+    messages,
+    model="gpt-3.5-turbo",
+    max_tokens: int = 16,
+    temperature: float = 1,
+    top_p: float = 1,
+    n: int = 1,
+    stop: Optional[str | list[str]] = None,
+    presence_penalty: float = 0,
+    frequency_penalty: float = 0,
+    logit_bias: Optional[dict[int, float]] = None,
+    cache_version: Optional[str] = None,
+) -> str:
+    response = openai.ChatCompletion.create(
+        model=model,
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        n=n,
+        stop=stop,
+        presence_penalty=presence_penalty,
+        frequency_penalty=frequency_penalty,
+        logit_bias=logit_bias,
+    )
 
     return response.choices[0].message.content
 
 
 @catch
 @cache
-def complete(prompt, model="text-davinci-003", **kwargs):
-    response = openai.Completion.create(model=model, prompt=prompt, **kwargs)
+def complete(
+    prompt: str = "<|endoftext|>",
+    model: str = "text-davinci-003",
+    max_tokens: int = 16,
+    temperature: float = 1,
+    top_p: float = 1,
+    n: int = 1,
+    logprobs: Optional[int] = None,
+    stop: Optional[str | list[str]] = None,
+    presence_penalty: float = 0,
+    frequency_penalty: float = 0,
+    best_of: int = 1,
+    logit_bias: Optional[dict[int, float]] = None,
+    cache_version: Optional[str] = None,
+) -> str:
+    response = openai.Completion.create(
+        model=model,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        n=n,
+        logprobs=logprobs,
+        stop=stop,
+        presence_penalty=presence_penalty,
+        frequency_penalty=frequency_penalty,
+        best_of=best_of,
+        logit_bias=logit_bias,
+    )
 
     return response.choices[0].text
 
