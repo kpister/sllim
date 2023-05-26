@@ -36,6 +36,12 @@ chat(
 
 * Parameter names are in the functions so that you don't have to go looking at the docs constantly.
 
+* Map reduce prompts onto data
+
 * TODO: Cost estimates before running long tasks
 
 * TODO: Describe task -> run task
+
+* TODO: Allow easy estimate
+
+* TODO: Allow easy logging
