@@ -13,6 +13,9 @@ import tiktoken
 from openai.error import RateLimitError
 
 
+LOCAL_CACHE = {}
+
+
 class Message(TypedDict):
     role: str
     content: str
@@ -73,17 +76,21 @@ def cache(fn):
 
 
 def catch(fn):
+    backoff = {0: 0}
+
     def wrapper(*args, **kwargs):
         try:
+            backoff[0] = 0
             return fn(*args, **kwargs)
         except RateLimitError:
             logging.info("Rate limit error")
-            time.sleep(1)
+            time.sleep(2 ** backoff[0])
             return fn(*args, **kwargs)
         except openai.APIError as e:
+            print(e)
             if e.code and e.code >= 500:
                 logging.info("API Error")
-                time.sleep(1)
+                time.sleep(2 ** backoff[0])
                 return fn(*args, **kwargs)
             else:
                 raise e
@@ -194,6 +201,23 @@ def estimate(messages_or_prompt: Prompt, model="gpt-3.5-turbo"):
     return {"tokens": total, "cost": total * model_cost.get(model) / 1000}
 
 
+def load_cache(base, t):
+    global LOCAL_CACHE
+
+    folder_name = ".cache"
+    cache_file = os.path.join(folder_name, f"{base}.json")
+    if not os.path.exists(cache_file):
+        os.makedirs(folder_name, exist_ok=True)
+        with open(cache_file, "w") as w:
+            w.write("{}")
+
+    # Load from cache
+    with open(cache_file) as w:
+        cache = json.load(w)
+
+    LOCAL_CACHE = cache.get(t, {})
+
+
 def check_cache(base, t, c):
     folder_name = ".cache"
     cache_file = os.path.join(folder_name, f"{base}.json")
@@ -225,15 +249,12 @@ def save_tmp_cache(base, t, c, result):
 
 def mp_call(args):
     # 1. check true cache for t&c
-    fn = args[1]["__function"]
-    t = json.dumps(args[1]["__template"])
     c = args[0][1]
-
-    result = check_cache(fn, t, c)
-    if result:
-        return result
+    if c in LOCAL_CACHE:
+        return LOCAL_CACHE[c]
 
     # 2. if not in true cache, compute
+    fn = args[1]["__function"]
     fns = {"complete": complete, "chat": chat}
     result = fns.get(fn)(
         args[0][0],
@@ -241,6 +262,7 @@ def mp_call(args):
         cache=False,
     )
     # 3. add to tmp cache
+    t = json.dumps(args[1]["__template"])
     save_tmp_cache(fn, t, c, result)
     return result
 
@@ -277,11 +299,16 @@ def format_prompt(template: Prompt, **kwargs):
 
 
 def map_reduce(template: Prompt, n=8, **kwargs):
-    call_params = {}
+    params = {}
     for key, value in kwargs.items():
         if key in API_PARAMS:
-            call_params[key] = value
-    call_params["__template"] = template
+            params[key] = value
+    params["__template"] = template
+
+    if isinstance(template, str):
+        params["__function"] = "complete"
+    else:
+        params["__function"] = "chat"
 
     # Create an list of slices for each template
     iters = [[]]
@@ -294,21 +321,13 @@ def map_reduce(template: Prompt, n=8, **kwargs):
 
     iterator = to_slices(template, iters, constants)
 
-    # call_params["__function"] = "chat"
-    # for res in zip_longest(iterator, [], fillvalue=call_params):
-    #     yield mp_call(res)
-    # collate_caches(call_params["__function"])
-
     try:
-        with Pool(processes=n) as pool:
-            if isinstance(template, str):
-                call_params["__function"] = "complete"
-            else:
-                call_params["__function"] = "chat"
-
-            for res in pool.imap(
-                mp_call, zip_longest(iterator, [], fillvalue=call_params)
-            ):
+        with Pool(
+            processes=n,
+            initializer=load_cache,
+            initargs=(params["__function"], json.dumps(params["__template"])),
+        ) as pool:
+            for res in pool.imap(mp_call, zip_longest(iterator, [], fillvalue=params)):
                 yield res
     except KeyboardInterrupt:
         pool.terminate()
@@ -321,7 +340,7 @@ def map_reduce(template: Prompt, n=8, **kwargs):
         pool.join()
         print("EXCEPTION!", e)
     finally:
-        collate_caches(call_params["__function"])
+        collate_caches(params["__function"])
 
 
 def collate_caches(function_name):
