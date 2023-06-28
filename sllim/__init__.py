@@ -413,21 +413,12 @@ def collate_caches(function_name):
 
 def to_type_name(_type: str):
     if "list" in _type:
-        return {
-            "list[str]": "array",
-        }.get(_type, "array"), {"items": {"type": "string"}}
+        return "array", {"items": {"type": "string"}}
 
     return {
         "str": "string",
         "int": "number",
-        "list[str]": "array",
     }.get(_type, _type), {}
-
-def to_type_name(_type: str):
-    return {
-        "str": "string",
-        "int": "integer",
-    }.get(_type, _type)
 
 def parse_doc(doc: str):
     if not doc:
