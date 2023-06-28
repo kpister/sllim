@@ -422,7 +422,7 @@ def parse_doc(doc: str):
         return "", {}, []
 
     lines = doc.split(":param:")
-    description = lines[0].strip()
+    fn_description = lines[0].strip()
     properties = {}
     required = []
     for line in lines[1:]:
@@ -443,7 +443,7 @@ def parse_doc(doc: str):
             "description": description,
         }
 
-    return description, properties, required
+    return fn_description, properties, required
 
 def create_function_call(fn: Callable):
     description, properties, required = parse_doc(fn.__doc__)
