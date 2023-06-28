@@ -132,10 +132,56 @@ def chat(
         messages=messages,
         max_tokens=max_tokens,
         **kwargs,
-    )
+    ).choices[0].message
 
-    return response.choices[0].message.content
+    if response.get("content"):
+        return response.content
 
+    raise Exception("No content found in response.")
+
+
+@catch
+@cache
+def call(
+    messages,
+    model="gpt-3.5-turbo",
+    max_tokens: int = 256,
+    functions: Optional[list[dict]] = None,
+    temperature: float = 1,
+    top_p: float = 1,
+    n: int = 1,
+    stop: Optional[str | list[str]] = None,
+    presence_penalty: float = 0,
+    frequency_penalty: float = 0,
+    logit_bias: Optional[dict[int, float]] = None,
+    cache_version: Optional[str] = None,
+) -> str:
+    default_params = {
+        "temperature": 1,
+        "top_p": 1,
+        "n": 1,
+        "functions": None,
+        "stop": None,
+        "presence_penalty": 0,
+        "frequency_penalty": 0,
+        "logit_bias": None,
+    }
+    kwargs = {
+        k: v
+        for k, v in locals().items()
+        if k in default_params and v != default_params[k]
+    }
+    response = openai.ChatCompletion.create(
+        model=model,
+        messages=messages,
+        max_tokens=max_tokens,
+        **kwargs,
+    ).choices[0].message
+    
+    if response.get("function_call"):
+        return response.function_call
+    
+    raise Exception("No function call found in response.")
 
 @catch
 @cache

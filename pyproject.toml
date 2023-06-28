@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "sllim"
-version = "0.1.3"
+version = "0.1.4"
 description = "Fixing the openai api"
 authors = ["Kaiser Pister <kaiser@pister.dev>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.9"
-openai = "^0.27.7"
+openai = "^0.27.8"
 tiktoken = "^0.4.0"
 
 [build-system]
