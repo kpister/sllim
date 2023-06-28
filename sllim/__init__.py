@@ -5,7 +5,7 @@ import os
 import time
 from itertools import zip_longest
 from multiprocessing import Pool
-from typing import Optional, TypeVar, TypedDict
+from typing import Optional, TypeVar, TypedDict, Callable
 from uuid import uuid4
 
 import openai
@@ -59,10 +59,9 @@ def cache(fn):
         cache = json.load(w)
 
     def wrapper(*args, **kwargs):
-        if kwargs.get("cache", True):
+        if kwargs.get("nocache", False):
+            kwargs.pop("nocache")
             return fn(*args, **kwargs)
-
-        kwargs.pop("cache")
 
         key = str(args + tuple(kwargs.items()))
         if key not in cache:
@@ -411,3 +410,43 @@ def collate_caches(function_name):
 
     with open(cache_file, "w", encoding="utf-8") as w:
         json.dump(cache, w)
+
+def parse_doc(doc: str):
+    if not doc:
+        return "", {}, []
+
+    lines = doc.split(":param:")
+    description = lines[0].strip()
+    properties = {}
+    required = []
+    for line in lines[1:]:
+        line = line.strip()
+        if not line:
+            continue
+
+        parts = line.split(":")
+        name = parts[0].strip()
+        _type = parts[1].strip()
+        description = ":".join(parts[2:]).strip()
+        if name.startswith("*"):
+            name = name[1:]
+            required.append(name)
+
+        properties[name] = {
+            "type": _type,
+            "description": description,
+        }
+
+    return description, properties, required
+
+def create_function_call(fn: Callable):
+    description, properties, required = parse_doc(fn.__doc__)
+    return {
+        "name": fn.__name__,
+        "description": description,
+        "parameters": {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+        }
+    }
