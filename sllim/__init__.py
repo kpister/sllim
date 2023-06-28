@@ -412,6 +412,18 @@ def collate_caches(function_name):
         json.dump(cache, w)
 
 def to_type_name(_type: str):
+    if "list" in _type:
+        return {
+            "list[str]": "array",
+        }.get(_type, "array"), {"items": {"type": "string"}}
+
+    return {
+        "str": "string",
+        "int": "number",
+        "list[str]": "array",
+    }.get(_type, _type), {}
+
+def to_type_name(_type: str):
     return {
         "str": "string",
         "int": "integer",
@@ -438,10 +450,13 @@ def parse_doc(doc: str):
             name = name[1:]
             required.append(name)
 
+        type_name, type_items = to_type_name(_type)
         properties[name] = {
-            "type": to_type_name(_type),
+            "type": type_name,
             "description": description,
         }
+        if type_items:
+            properties[name].update(type_items)
 
     return fn_description, properties, required
 
@@ -456,3 +471,10 @@ def create_function_call(fn: Callable):
             "required": required,
         }
     }
+
+def format(s: str, **kwargs):
+    using = {}
+    for key, value in kwargs.items():
+        if "{%s}" % key in s:
+            using[key] = value
+    return s.format(**using)
