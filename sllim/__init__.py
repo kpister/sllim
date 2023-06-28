@@ -411,6 +411,12 @@ def collate_caches(function_name):
     with open(cache_file, "w", encoding="utf-8") as w:
         json.dump(cache, w)
 
+def to_type_name(_type: str):
+    return {
+        "str": "string",
+        "int": "integer",
+    }.get(_type, _type)
+
 def parse_doc(doc: str):
     if not doc:
         return "", {}, []
@@ -433,7 +439,7 @@ def parse_doc(doc: str):
             required.append(name)
 
         properties[name] = {
-            "type": _type,
+            "type": to_type_name(_type),
             "description": description,
         }
 
