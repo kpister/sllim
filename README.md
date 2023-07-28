@@ -8,7 +8,7 @@ Nothing here is ground-breaking; everything here is opinionated.
 ## Usage
 
 Use the `chat` function to connect with the `ChatCompletion.create` models. By default, it uses the `gpt-3.5-turbo` model, but you can pass a `model` param to use `gpt-4`
-```
+```python
 from sllim import chat
 
 chat(
@@ -26,6 +26,32 @@ chat(
 ```
 
 `complete` works just like `Completion.create`, and `embed` is `Embedding.create`.
+
+## Map Reduce
+```python
+from sllim import map_reduce
+
+template = [
+ {
+    "role": "system",
+    "content": "You are an excellent copy writer and you will rewrite my work into {adjective} words."
+ },
+ {
+    "role": "user",
+    "content": "Below is my writing, please improve it.\n\n{writing}"
+ },
+]
+
+writings = [...] # long list of copywriting
+for adjective in ["clearer", "more expressive", "fewer"]:
+    # Since `writings` is a list, this is what we will reduce over.
+    # The other variables are treated as constants through the reduction.
+    gen = map_reduce(template, adjective=adjective, writing=writings, model="gpt-4")
+    for idx, result in enumerate(gen):
+        # This is a multithreaded generator to optimize latency to networked services
+        original = writings[idx]
+        print("Was:", original, "\nNow:", result)
+```
 
 
 ## Benefits
