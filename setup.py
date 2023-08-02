@@ -15,7 +15,7 @@ with codecs.open(
 
 setup(
     name="sllim",
-    version="0.1.10",
+    version="0.1.11",
     author="Kaiser Pister",
     author_email="kaiser@pister.dev",
     packages=["sllim"],

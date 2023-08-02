@@ -6,6 +6,7 @@ import time
 from contextlib import contextmanager
 from itertools import zip_longest
 from multiprocessing import Pool
+from threading import Thread
 from typing import Optional, TypeVar, TypedDict, Callable
 from uuid import uuid4
 
@@ -416,11 +417,53 @@ def map_reduce(template: Prompt, n=8, **kwargs):
         import traceback
 
         traceback.print_exc()
-        pool.terminate()
-        pool.join()
         print("EXCEPTION!", e)
     finally:
         collate_caches(params["__function"])
+
+def thread_map_reduce(template: Prompt, n=8, **kwargs):
+    params = {}
+    for key, value in kwargs.items():
+        if key in API_PARAMS:
+            params[key] = value
+
+    if isinstance(template, str):
+        fn = complete
+    else:
+        fn = chat
+
+    # Create an list of slices for each template
+    iters = [[]]
+    constants = {}
+    max_len = 0
+    for key, value in kwargs.items():
+        if hasattr(value, "__iter__") and not isinstance(value, str):
+            iters.append([{key: v} for v in value])
+            max_len = max(max_len, len(value))
+        else:
+            constants[key] = value
+
+    iterator = to_slices(template, iters, constants)
+
+    results = ["" for _ in range(max_len)]
+    def thread_call(message, idx):
+        results[idx] = fn(message, **{k: v for k, v in params.items()}, nocache=True)
+
+    num_threads = min(n, max_len)
+    threads = []
+    for idx, (msg, _) in enumerate(iterator):
+        threads.append(Thread(target=thread_call, args=(msg, idx)))
+        threads[-1].start()
+
+        if len(threads) >= num_threads:
+            for thread in threads:
+                thread.join()
+            threads = []
+
+    for thread in threads:
+        thread.join()
+    
+    return results
 
 
 def collate_caches(function_name):
