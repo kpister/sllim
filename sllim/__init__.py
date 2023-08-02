@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+from contextlib import contextmanager
 from itertools import zip_longest
 from multiprocessing import Pool
 from typing import Optional, TypeVar, TypedDict, Callable
@@ -14,6 +15,9 @@ from openai.error import RateLimitError
 
 
 LOCAL_CACHE = {}
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class Message(TypedDict):
@@ -40,34 +44,65 @@ API_PARAMS = dict(
 
 def set_logging(level=logging.INFO):
     logging.basicConfig(level=level)
+    logger.setLevel(logging.INFO)
 
 
 def set_key(key):
     openai.api_key = key
 
 
+def try_make(folder_name):
+    try:
+        os.makedirs(folder_name, exist_ok=True)
+    except:
+        logger.info(f"Cannot create folder {folder_name}")
+
+
+class fake_file:
+    def write(self, *args, **kwargs):
+        pass
+
+    def close(self, *args, **kwargs):
+        pass
+
+    def read(self, *args, **kwargs):
+        return "{}"
+
+@contextmanager
+def try_open(filename, mode="r"):
+    try:
+        f = open(filename, mode, encoding="utf-8")
+    except:
+        f = fake_file()
+
+    try:
+        yield f
+
+    finally:
+        f.close()
+
+
+
 def cache(fn):
     folder_name = ".cache"
     cache_file = os.path.join(folder_name, f"{fn.__name__}.json")
     if not os.path.exists(cache_file):
-        os.makedirs(folder_name, exist_ok=True)
-        with open(cache_file, "w") as w:
-            w.write("{}")
+        try_make(folder_name)
 
     # Load from cache
-    with open(cache_file) as w:
+    with try_open(cache_file) as w:
         cache = json.load(w)
 
     def wrapper(*args, **kwargs):
         if kwargs.get("nocache", False):
-            kwargs.pop("nocache")
+            kwargs.pop("nocache", None)
             return fn(*args, **kwargs)
 
         key = str(args + tuple(kwargs.items()))
         if key not in cache:
             res = fn(*args, **kwargs)
             cache[key] = res
-            with open(cache_file, "w") as w:
+            with try_open(cache_file, "w") as w:
                 json.dump(cache, w)
         return cache[key]
 
@@ -82,13 +117,13 @@ def catch(fn):
             backoff[0] = 0
             return fn(*args, **kwargs)
         except RateLimitError:
-            logging.info("Rate limit error")
+            logger.info("Rate limit error")
             time.sleep(2 ** backoff[0])
             return fn(*args, **kwargs)
         except openai.APIError as e:
             print(e)
             if e.code and e.code >= 500:
-                logging.info("API Error")
+                logger.info("API Error")
                 time.sleep(2 ** backoff[0])
                 return fn(*args, **kwargs)
             else:
@@ -126,6 +161,7 @@ def chat(
         for k, v in locals().items()
         if k in default_params and v != default_params[k]
     }
+    logger.info(f"Calling {model} with messages: {messages}")
     response = openai.ChatCompletion.create(
         model=model,
         messages=messages,
@@ -134,6 +170,7 @@ def chat(
     ).choices[0].message
 
     if response.get("content"):
+        logger.info(f"Response: {response.content}")
         return response.content
 
     raise Exception("No content found in response.")
@@ -252,12 +289,10 @@ def load_cache(base, t):
     folder_name = ".cache"
     cache_file = os.path.join(folder_name, f"{base}.json")
     if not os.path.exists(cache_file):
-        os.makedirs(folder_name, exist_ok=True)
-        with open(cache_file, "w") as w:
-            w.write("{}")
+        try_make(folder_name)
 
     # Load from cache
-    with open(cache_file) as w:
+    with try_open(cache_file) as w:
         cache = json.load(w)
 
     LOCAL_CACHE = cache.get(t, {})
@@ -267,12 +302,10 @@ def check_cache(base, t, c):
     folder_name = ".cache"
     cache_file = os.path.join(folder_name, f"{base}.json")
     if not os.path.exists(cache_file):
-        os.makedirs(folder_name, exist_ok=True)
-        with open(cache_file, "w") as w:
-            w.write("{}")
+        try_make(folder_name)
 
     # Load from cache
-    with open(cache_file) as w:
+    with try_open(cache_file) as w:
         cache = json.load(w)
 
     if t in cache and c in cache[t]:
@@ -286,9 +319,9 @@ def save_tmp_cache(base, t, c, result):
     cache_file = os.path.join(folder_name, f"{base}.{str(uuid4())}.tmp.json")
 
     if not os.path.exists(folder_name):
-        os.makedirs(folder_name, exist_ok=True)
+        try_make(folder_name)
 
-    with open(cache_file, "w", encoding="utf-8") as w:
+    with try_open(cache_file, "w") as w:
         json.dump({t: {c: result}}, w)
 
 
@@ -304,7 +337,7 @@ def mp_call(args):
     result = fns.get(fn)(
         args[0][0],
         **{k: v for k, v in args[1].items() if not k.startswith("__")},
-        cache=False,
+        nocache=True,
     )
     # 3. add to tmp cache
     t = json.dumps(args[1]["__template"])
@@ -358,9 +391,11 @@ def map_reduce(template: Prompt, n=8, **kwargs):
     # Create an list of slices for each template
     iters = [[]]
     constants = {}
+    max_len = 0
     for key, value in kwargs.items():
         if hasattr(value, "__iter__") and not isinstance(value, str):
             iters.append([{key: v} for v in value])
+            max_len = max(max_len, len(value))
         else:
             constants[key] = value
 
@@ -368,7 +403,7 @@ def map_reduce(template: Prompt, n=8, **kwargs):
 
     try:
         with Pool(
-            processes=n,
+            processes=min(n, max_len),
             initializer=load_cache,
             initargs=(params["__function"], json.dumps(params["__template"])),
         ) as pool:
@@ -392,15 +427,13 @@ def collate_caches(function_name):
     folder_name = ".cache"
     cache_file = os.path.join(folder_name, f"{function_name}.json")
     if not os.path.exists(cache_file):
-        os.makedirs(folder_name, exist_ok=True)
-        with open(cache_file, "w") as w:
-            w.write("{}")
+        try_make(folder_name)
 
-    with open(cache_file) as w:
+    with try_open(cache_file) as w:
         cache = json.load(w)
 
     for f in glob.glob(os.path.join(folder_name, f"{function_name}.*.tmp.json")):
-        with open(f, encoding="utf-8") as w:
+        with try_open(f) as w:
             tmp_cache = json.load(w)
             key = list(tmp_cache.keys())[0]
             if key not in cache:
@@ -408,7 +441,7 @@ def collate_caches(function_name):
             cache[key].update(tmp_cache[key])
         os.remove(f)
 
-    with open(cache_file, "w", encoding="utf-8") as w:
+    with try_open(cache_file, "w") as w:
         json.dump(cache, w)
 
 def to_type_name(_type: str):
