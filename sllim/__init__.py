@@ -73,7 +73,7 @@ class fake_file:
 def try_open(filename, mode="r"):
     try:
         f = open(filename, mode, encoding="utf-8")
-    except:
+    except Exception:
         f = fake_file()
 
     try:
@@ -116,15 +116,17 @@ def catch(fn):
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except RateLimitError:
+        except RateLimitError as e:
             backoff[0] += 1
+            if backoff[0] > 7:
+                raise e
             logger.info("Rate limit error")
             time.sleep(2 ** backoff[0])
             return wrapper(*args, **kwargs)
         except openai.APIError as e:
             logger.info("API Error: " + str(e))
-            if e.code and e.code >= 500:
-                backoff[0] += 1
+            backoff[0] += 1
+            if e.code and e.code >= 500 and backoff[0] <= 7:
                 time.sleep(2 ** backoff[0])
                 return wrapper(*args, **kwargs)
             else:
