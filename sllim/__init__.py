@@ -115,20 +115,22 @@ def catch(fn):
 
     def wrapper(*args, **kwargs):
         try:
-            backoff[0] = 0
             return fn(*args, **kwargs)
         except RateLimitError:
+            backoff[0] += 1
             logger.info("Rate limit error")
             time.sleep(2 ** backoff[0])
-            return fn(*args, **kwargs)
+            return wrapper(*args, **kwargs)
         except openai.APIError as e:
-            print(e)
+            logger.info("API Error: " + str(e))
             if e.code and e.code >= 500:
-                logger.info("API Error")
+                backoff[0] += 1
                 time.sleep(2 ** backoff[0])
-                return fn(*args, **kwargs)
+                return wrapper(*args, **kwargs)
             else:
                 raise e
+        finally:
+            backoff[0] = 0
 
     return wrapper
 
