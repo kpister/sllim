@@ -55,7 +55,7 @@ def set_key(key):
 def try_make(folder_name):
     try:
         os.makedirs(folder_name, exist_ok=True)
-    except:
+    except Exception:
         logger.info(f"Cannot create folder {folder_name}")
 
 
