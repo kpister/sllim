@@ -117,17 +117,17 @@ def catch(fn):
         try:
             return fn(*args, **kwargs)
         except RateLimitError as e:
-            backoff[0] += 1
-            if backoff[0] > 7:
-                raise e
             logger.info("Rate limit error")
-            time.sleep(2 ** backoff[0])
+            backoff[0] += 1
+            if backoff[0] > 9:
+                raise e
+            time.sleep(min(2 ** backoff[0], 60))
             return wrapper(*args, **kwargs)
         except openai.APIError as e:
             logger.info("API Error: " + str(e))
             backoff[0] += 1
-            if e.code and e.code >= 500 and backoff[0] <= 7:
-                time.sleep(2 ** backoff[0])
+            if e.code and e.code >= 500 and backoff[0] <= 9:
+                time.sleep(min(2 ** backoff[0], 60))
                 return wrapper(*args, **kwargs)
             else:
                 raise e
@@ -451,7 +451,10 @@ def thread_map_reduce(template: Prompt, n=8, **kwargs):
 
     results = ["" for _ in range(max_len)]
     def thread_call(message, idx):
-        results[idx] = fn(message, **{k: v for k, v in params.items()}, nocache=True)
+        try:
+            results[idx] = fn(message, **{k: v for k, v in params.items()}, nocache=True)
+        except RateLimitError:
+            results[idx] = ""
 
     num_threads = min(n, max_len)
     threads = []
