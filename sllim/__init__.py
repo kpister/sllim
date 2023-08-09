@@ -20,6 +20,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+prompt_tokens, completion_tokens = 0, 0
+
 
 class Message(TypedDict):
     role: str
@@ -50,6 +52,12 @@ def set_logging(level=logging.INFO):
 
 def set_key(key):
     openai.api_key = key
+
+
+def get_token_counts():
+    global prompt_tokens, completion_tokens
+
+    return prompt_tokens, completion_tokens
 
 
 def try_make(folder_name):
@@ -152,6 +160,8 @@ def chat(
     logit_bias: Optional[dict[int, float]] = None,
     cache_version: Optional[str] = None,
 ) -> str:
+    global prompt_tokens, completion_tokens
+
     default_params = {
         "temperature": 1,
         "top_p": 1,
@@ -172,11 +182,14 @@ def chat(
         messages=messages,
         max_tokens=max_tokens,
         **kwargs,
-    ).choices[0].message
+    )
+    message = response.choices[0].message
+    prompt_tokens += response.usage.prompt_tokens
+    completion_tokens += response.usage.completion_tokens
 
-    if response.get("content"):
-        logger.info(f"Response: {response.content}")
-        return response.content
+    if message.get("content"):
+        logger.info(f"Response: {message.content}")
+        return message.content
 
     raise Exception("No content found in response.")
 
@@ -197,6 +210,8 @@ def call(
     logit_bias: Optional[dict[int, float]] = None,
     cache_version: Optional[str] = None,
 ) -> str:
+    global prompt_tokens, completion_tokens
+
     default_params = {
         "temperature": 1,
         "top_p": 1,
@@ -217,10 +232,13 @@ def call(
         messages=messages,
         max_tokens=max_tokens,
         **kwargs,
-    ).choices[0].message
+    )
+    message = response.choices[0].message
+    prompt_tokens += response.usage.prompt_tokens
+    completion_tokens += response.usage.completion_tokens
     
-    if response.get("function_call"):
-        return response.function_call
+    if message.get("function_call"):
+        return message.function_call
     
     raise Exception("No function call found in response.")
 
@@ -241,6 +259,8 @@ def complete(
     logit_bias: Optional[dict[int, float]] = None,
     cache_version: Optional[str] = None,
 ) -> str:
+    global prompt_tokens, completion_tokens
+
     response = openai.Completion.create(
         model=model,
         prompt=prompt,
@@ -255,8 +275,11 @@ def complete(
         best_of=best_of,
         logit_bias=logit_bias,
     )
+    message = response.choices[0].text
+    prompt_tokens += response.usage.prompt_tokens
+    completion_tokens += response.usage.completion_tokens
 
-    return response.choices[0].text
+    return message
 
 
 @catch
