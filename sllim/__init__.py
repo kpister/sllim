@@ -2,6 +2,7 @@ import glob
 import json
 import logging
 import os
+import re
 import time
 from contextlib import contextmanager
 from itertools import zip_longest
@@ -27,6 +28,10 @@ class Message(TypedDict):
     role: str
     content: str
 
+class FunctionT(TypedDict):
+    name: str
+    description: str
+    parameters: dict[str, dict[str, str | dict]]
 
 Prompt = TypeVar("Prompt", str, list[Message])
 
@@ -202,7 +207,7 @@ def call(
     messages,
     model="gpt-3.5-turbo",
     max_tokens: int = 256,
-    functions: Optional[list[dict]] = None,
+    functions: Optional[list[FunctionT]] = None,
     temperature: float = 1,
     top_p: float = 1,
     n: int = 1,
@@ -212,6 +217,7 @@ def call(
     logit_bias: Optional[dict[int, float]] = None,
     cache_version: Optional[str] = None,
 ) -> str:
+    """Generate a function call based on the messages. Use `create_function_call` to prepare `functions` arg."""
     global prompt_tokens, completion_tokens
 
     default_params = {
@@ -243,7 +249,7 @@ def call(
     if message.get("function_call"):
         return message.function_call
     
-    raise Exception("No function call found in response.")
+    raise Exception("No function call found in response. %s" % str(message))
 
 @catch
 @cache
@@ -521,8 +527,9 @@ def collate_caches(function_name):
         json.dump(cache, w)
 
 def to_type_name(_type: str):
-    if "list" in _type:
+    if "list" in _type or "tuple" in _type:
         return "array", {"items": {"type": "string"}}
+    
 
     return {
         "str": "string",
@@ -545,6 +552,7 @@ def parse_doc(doc: str):
         parts = line.split(":")
         name = parts[0].strip()
         _type = parts[1].strip()
+        _type = re.sub(r"Optional\[(.*)\]", r"\1", _type)
         description = ":".join(parts[2:]).strip()
         if name.startswith("*"):
             name = name[1:]
@@ -560,7 +568,7 @@ def parse_doc(doc: str):
 
     return fn_description, properties, required
 
-def create_function_call(fn: Callable):
+def create_function_call(fn: Callable) -> FunctionT:
     description, properties, required = parse_doc(fn.__doc__)
     return {
         "name": fn.__name__,
