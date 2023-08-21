@@ -176,7 +176,9 @@ def chat(
         for k, v in locals().items()
         if k in default_params and v != default_params[k]
     }
-    logger.info(f"Calling {model} with messages: {messages}")
+    max_tokens = min(max_tokens, 8000 - estimate(messages, model=model)["tokens"])
+    logger.info(f"Calling {model} using at most {max_tokens} with messages: {messages}")
+
     response = openai.ChatCompletion.create(
         model=model,
         messages=messages,
@@ -227,6 +229,7 @@ def call(
         for k, v in locals().items()
         if k in default_params and v != default_params[k]
     }
+
     response = openai.ChatCompletion.create(
         model=model,
         messages=messages,
