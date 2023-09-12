@@ -155,7 +155,8 @@ def catch(fn):
 def chat(
     messages,
     model="gpt-3.5-turbo",
-    max_tokens: int = 256,
+    max_tokens: Optional[int] = None,
+    functions: Optional[list[FunctionT]] = None,
     temperature: float = 1,
     top_p: float = 1,
     n: int = 1,
@@ -163,11 +164,17 @@ def chat(
     presence_penalty: float = 0,
     frequency_penalty: float = 0,
     logit_bias: Optional[dict[int, float]] = None,
+    deployment_id: Optional[str] = None,
     cache_version: Optional[str] = None,
 ) -> str:
     global prompt_tokens, completion_tokens
 
+    if deployment_id:
+        model = None
+
     default_params = {
+        "model": None,
+        "max_tokens": None,
         "temperature": 1,
         "top_p": 1,
         "n": 1,
@@ -175,19 +182,19 @@ def chat(
         "presence_penalty": 0,
         "frequency_penalty": 0,
         "logit_bias": None,
+        "deployment_id": None,
     }
     kwargs = {
         k: v
         for k, v in locals().items()
         if k in default_params and v != default_params[k]
     }
-    max_tokens = min(max_tokens, 8000 - estimate(messages, model=model)["tokens"])
-    logger.info(f"Calling {model} using at most {max_tokens} with messages: {messages}")
+    max_tokens_str = "infinity" if max_tokens is None else str(max_tokens)
+    model_str = model if model else deployment_id
+    logger.info(f"Calling {model_str} using at most {max_tokens_str} with messages: {messages}")
 
     response = openai.ChatCompletion.create(
-        model=model,
         messages=messages,
-        max_tokens=max_tokens,
         **kwargs,
     )
     message = response.choices[0].message
@@ -390,24 +397,12 @@ def to_slices(template: Prompt, iters, constants):
 
 def format_prompt(template: Prompt, **kwargs):
     if isinstance(template, str):
-        return template.format(
-            **{
-                key: value
-                for key, value in kwargs.items()
-                if "{" + key + "}" in template
-            }
-        )
+        return format(template, **kwargs)
     else:
         return [
             {
                 "role": message["role"],
-                "content": message["content"].format(
-                    **{
-                        key: value
-                        for key, value in kwargs.items()
-                        if "{" + key + "}" in message["content"]
-                    }
-                ),
+                "content": format(message["content"], **kwargs),
             }
             for message in template
         ]
@@ -581,8 +576,6 @@ def create_function_call(fn: Callable) -> FunctionT:
     }
 
 def format(s: str, **kwargs):
-    using = {}
     for key, value in kwargs.items():
-        if "{%s}" % key in s:
-            using[key] = value
-    return s.format(**using)
+        s = s.replace("{" + key + "}", value)
+    return s
