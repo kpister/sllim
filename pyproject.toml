@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sllim"
-version = "0.1.20"
+version = "0.1.21"
 description = "Fixing the openai api"
 authors = ["Kaiser Pister <kaiser@pister.dev>"]
 readme = "README.md"

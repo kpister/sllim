@@ -37,6 +37,7 @@ Prompt = TypeVar("Prompt", str, list[Message])
 
 API_PARAMS = dict(
     model="",
+    deployment_id=None,
     max_tokens=256,
     temperature=1,
     top_p=1,
