@@ -23,6 +23,16 @@ logger.setLevel(logging.INFO)
 
 prompt_tokens, completion_tokens = 0, 0
 
+def load_template(filepath: str) -> tuple[str, str]:
+    with open(filepath, "r") as f:
+        description, text = f.read().split("\n", 1)
+        if not description.startswith("#"):
+            # Not a proper prompt file
+            logger.warning(f"File {filepath} does not start with a `# description line`.")
+            text = description + "\n" + text
+            description = ""
+        return description, text.strip()
+
 
 class Message(TypedDict):
     role: str
