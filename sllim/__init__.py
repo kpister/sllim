@@ -311,15 +311,17 @@ def complete(
 
 @catch
 @cache
-def embed(text: str | list[str]) -> list[float] | list[list[float]]:
-    embed_model = "text-embedding-ada-002"
+def embed(text: str | list[str], engine="text-embedding-ada-002", deployment_id: str=None) -> list[float] | list[list[float]]:
+    if deployment_id:
+        engine = None
+    kwargs = {k: v for k, v in locals().items() if k in ["engine", "deployment_id"] and v is not None}
     if isinstance(text, list):
         text = [t.replace("\n", " ") for t in text]
-        response = openai.Embedding.create(input=text, model=embed_model)["data"]
+        response = openai.Embedding.create(input=text, **kwargs)["data"]
         return [x["embedding"] for x in response]
     else:
         text = text.replace("\n", " ")
-        return openai.Embedding.create(input=[text], model=embed_model)["data"][0][
+        return openai.Embedding.create(input=[text], **kwargs)["data"][0][
             "embedding"
         ]
 

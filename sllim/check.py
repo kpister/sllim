@@ -38,7 +38,7 @@ def gather(directory, ignore=None, ext=".txt"):
         ignore = os.path.abspath(ignore)
 
     files = os.listdir(directory)
-    text_files = []
+    out_files = []
     for fn in files:
         fn = os.path.join(directory, fn)
         fn = os.path.abspath(fn)
@@ -46,12 +46,12 @@ def gather(directory, ignore=None, ext=".txt"):
             continue
 
         if os.path.isdir(fn):
-            text_files.extend(gather(fn, ignore, ext))
+            out_files.extend(gather(fn, ignore, ext))
         elif os.path.isfile(fn) and os.path.splitext(fn)[1] == ext:
             if ext != ".txt" or "prompt" in fn:
-                text_files.append(fn)
+                out_files.append(fn)
 
-    return text_files
+    return out_files
 
 def check_spelling(pfile: PromptFile):
     results = spell.unknown(spell.split_words(pfile.text))
@@ -134,7 +134,11 @@ def walk(tree: ast.AST):
     for ancestor in ast.walk(tree):
         for child in ast.iter_child_nodes(ancestor):
             if value := handle_load_template(child):
-                track_ids[ancestor.targets[0].id] = (value, [])
+                if isinstance(ancestor.targets[0], ast.Tuple):
+                    tid = ancestor.targets[0].elts[-1].id
+                else:
+                    tid = ancestor.targets[0].id
+                track_ids[tid] = (value, [])
             else: 
                 key, keywords = handle_use_template(ancestor, child, track_ids)
                 if key and keywords and key in track_ids:
@@ -159,7 +163,7 @@ def run_checks(text_files, python_files):
             logger.warning(f"Possible typos in {tfile.filename}: {tfile.typos}")
             spelling_errors = True
         
-        if tfile.extra_variables:
+        if tfile.extra_variables or tfile.missing_variables:
             variable_errors = True
 
     if not spelling_errors:
@@ -178,5 +182,6 @@ def run():
 
     args = parser.parse_args()
     prompt_files = gather(args.directory, args.ignore, ext=".txt")
+    prompt_files += gather(args.directory, args.ignore, ext=".prompt")
     python_files = gather(args.directory, args.ignore, ext=".py")
     run_checks(prompt_files, python_files)
