@@ -1,9 +1,10 @@
 [tool.poetry]
 name = "sllim"
-version = "0.1.22"
+version = "0.1.25"
 description = "Fixing the openai api"
 authors = ["Kaiser Pister <kaiser@pister.dev>"]
 readme = "README.md"
+homepage = "https://github.com/kpister/sllim"
 
 [tool.poetry.dependencies]
 python = "^3.9"
