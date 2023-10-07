@@ -23,12 +23,15 @@ logger.setLevel(logging.INFO)
 
 prompt_tokens, completion_tokens = 0, 0
 
+
 def load_template(filepath: str) -> tuple[str, str]:
     with open(filepath, "r") as f:
         description, text = f.read().split("\n", 1)
         if not description.startswith("#"):
             # Not a proper prompt file
-            logger.warning(f"File {filepath} does not start with a `# description line`.")
+            logger.warning(
+                f"File {filepath} does not start with a `# description line`."
+            )
             text = description + "\n" + text
             description = ""
         return description, text.strip()
@@ -38,10 +41,12 @@ class Message(TypedDict):
     role: str
     content: str
 
+
 class FunctionT(TypedDict):
     name: str
     description: str
     parameters: dict[str, dict[str, str | dict]]
+
 
 Prompt = TypeVar("Prompt", str, list[Message])
 
@@ -76,6 +81,12 @@ def get_token_counts():
     return prompt_tokens, completion_tokens
 
 
+def reset_token_counts():
+    global prompt_tokens, completion_tokens
+
+    prompt_tokens, completion_tokens = 0, 0
+
+
 def try_make(folder_name):
     try:
         os.makedirs(folder_name, exist_ok=True)
@@ -93,6 +104,7 @@ class fake_file:
     def read(self, *args, **kwargs):
         return "{}"
 
+
 @contextmanager
 def try_open(filename, mode="r"):
     try:
@@ -105,7 +117,6 @@ def try_open(filename, mode="r"):
 
     finally:
         f.close()
-
 
 
 def cache(fn):
@@ -202,7 +213,9 @@ def chat(
     }
     max_tokens_str = "infinity" if max_tokens is None else str(max_tokens)
     model_str = model if model else deployment_id
-    logger.info(f"Calling {model_str} using at most {max_tokens_str} with messages: {messages}")
+    logger.info(
+        f"Calling {model_str} using at most {max_tokens_str} with messages: {messages}"
+    )
 
     response = openai.ChatCompletion.create(
         messages=messages,
@@ -263,11 +276,12 @@ def call(
     message = response.choices[0].message
     prompt_tokens += response.usage.prompt_tokens
     completion_tokens += response.usage.completion_tokens
-    
+
     if message.get("function_call"):
         return message.function_call
-    
+
     raise Exception("No function call found in response. %s" % str(message))
+
 
 @catch
 @cache
@@ -311,19 +325,23 @@ def complete(
 
 @catch
 @cache
-def embed(text: str | list[str], engine="text-embedding-ada-002", deployment_id: str=None) -> list[float] | list[list[float]]:
+def embed(
+    text: str | list[str], engine="text-embedding-ada-002", deployment_id: str = None
+) -> list[float] | list[list[float]]:
     if deployment_id:
         engine = None
-    kwargs = {k: v for k, v in locals().items() if k in ["engine", "deployment_id"] and v is not None}
+    kwargs = {
+        k: v
+        for k, v in locals().items()
+        if k in ["engine", "deployment_id"] and v is not None
+    }
     if isinstance(text, list):
         text = [t.replace("\n", " ") for t in text]
         response = openai.Embedding.create(input=text, **kwargs)["data"]
         return [x["embedding"] for x in response]
     else:
         text = text.replace("\n", " ")
-        return openai.Embedding.create(input=[text], **kwargs)["data"][0][
-            "embedding"
-        ]
+        return openai.Embedding.create(input=[text], **kwargs)["data"][0]["embedding"]
 
 
 def estimate(messages_or_prompt: Prompt, model="gpt-3.5-turbo"):
@@ -465,6 +483,7 @@ def map_reduce(template: Prompt, n=8, **kwargs):
     finally:
         collate_caches(params["__function"])
 
+
 def thread_map_reduce(template: Prompt, n=8, **kwargs):
     params = {}
     for key, value in kwargs.items():
@@ -490,9 +509,12 @@ def thread_map_reduce(template: Prompt, n=8, **kwargs):
     iterator = to_slices(template, iters, constants)
 
     results = ["" for _ in range(max_len)]
+
     def thread_call(message, idx):
         try:
-            results[idx] = fn(message, **{k: v for k, v in params.items()}, nocache=True)
+            results[idx] = fn(
+                message, **{k: v for k, v in params.items()}, nocache=True
+            )
         except RateLimitError:
             results[idx] = ""
 
@@ -509,7 +531,7 @@ def thread_map_reduce(template: Prompt, n=8, **kwargs):
 
     for thread in threads:
         thread.join()
-    
+
     return results
 
 
@@ -534,15 +556,16 @@ def collate_caches(function_name):
     with try_open(cache_file, "w") as w:
         json.dump(cache, w)
 
+
 def to_type_name(_type: str):
     if "list" in _type or "tuple" in _type:
         return "array", {"items": {"type": "string"}}
-    
 
     return {
         "str": "string",
         "int": "number",
     }.get(_type, _type), {}
+
 
 def parse_doc(doc: str):
     if not doc:
@@ -576,6 +599,7 @@ def parse_doc(doc: str):
 
     return fn_description, properties, required
 
+
 def create_function_call(fn: Callable) -> FunctionT:
     description, properties, required = parse_doc(fn.__doc__)
     return {
@@ -585,8 +609,9 @@ def create_function_call(fn: Callable) -> FunctionT:
             "type": "object",
             "properties": properties,
             "required": required,
-        }
+        },
     }
+
 
 def format(s: str, **kwargs):
     for key, value in kwargs.items():

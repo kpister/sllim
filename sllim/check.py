@@ -12,7 +12,7 @@ from . import load_template
 logger = logging.getLogger(__name__)
 
 spell = SpellChecker()
-spell.word_frequency.load_words(['schema', 'bulleted'])
+spell.word_frequency.load_words(["schema", "bulleted"])
 
 
 @dataclass
@@ -24,6 +24,7 @@ class PromptFile:
     variables: list[str] = field(default_factory=list)
     extra_variables: list[str] = field(default_factory=list)
     missing_variables: list[str] = field(default_factory=list)
+
 
 @dataclass
 class PythonFile:
@@ -53,12 +54,17 @@ def gather(directory, ignore=None, ext=".txt"):
 
     return out_files
 
+
 def check_spelling(pfile: PromptFile):
     results = spell.unknown(spell.split_words(pfile.text))
-    pfile.typos = list(filter(lambda x: len(x) > 3 and "_" not in x and spell.candidates(x), results))
+    pfile.typos = list(
+        filter(lambda x: len(x) > 3 and "_" not in x and spell.candidates(x), results)
+    )
+
 
 def load_variables(pfile: PromptFile):
     pfile.variables = set(re.findall(r"\{(\w+)\}", pfile.text))
+
 
 def check_usage(tfile: PromptFile, pyfiles: list[PythonFile]):
     for pyfile in pyfiles:
@@ -67,13 +73,18 @@ def check_usage(tfile: PromptFile, pyfiles: list[PythonFile]):
                 continue
 
             for variables in usages:
-                for variable in (set(variables) - set(tfile.variables)):
-                    logger.warning(f"{os.path.relpath(pyfile.filename)}: Variable {variable} not defined in {os.path.relpath(tfile.filename)}.")
+                for variable in set(variables) - set(tfile.variables):
+                    logger.warning(
+                        f"{os.path.relpath(pyfile.filename)}: Variable {variable} not defined in {os.path.relpath(tfile.filename)}."
+                    )
                     tfile.extra_variables.append(variable)
-                
-                for variable in (set(tfile.variables) - set(variables)):
-                    logger.warning(f"{os.path.relpath(pyfile.filename)}: Variable {variable} not used in {os.path.relpath(tfile.filename)}.")
+
+                for variable in set(tfile.variables) - set(variables):
+                    logger.warning(
+                        f"{os.path.relpath(pyfile.filename)}: Variable {variable} not used in {os.path.relpath(tfile.filename)}."
+                    )
                     tfile.missing_variables.append(variable)
+
 
 def check_file(filepath, pyfiles: list[PythonFile]):
     description, prompt = load_template(filepath)
@@ -84,6 +95,7 @@ def check_file(filepath, pyfiles: list[PythonFile]):
     check_usage(pfile, pyfiles)
     return pfile
 
+
 def load_python_file(filepath):
     try:
         with open(filepath, "r") as f:
@@ -91,10 +103,10 @@ def load_python_file(filepath):
     except UnicodeDecodeError:
         logger.warning(f"Unable to read {filepath}.")
         return None
-    
+
     if "sllim" not in text or "load_template" not in text:
         return None
-    
+
     track_ids = walk(ast.parse(text))
     python_file = PythonFile(filename=filepath, text=text, uses=track_ids)
     return python_file
@@ -112,22 +124,33 @@ def get_arg(node: ast.Call):
         elif isinstance(node.keywords[0], ast.Name):
             return node.keywords[0].id
     return None
-    
+
+
 def handle_load_template(node: ast.AST):
-    if isinstance(node, ast.Call) and hasattr(node.func, "id") and node.func.id == "load_template":
+    if (
+        isinstance(node, ast.Call)
+        and hasattr(node.func, "id")
+        and node.func.id == "load_template"
+    ):
         return get_arg(node)
 
     return None
 
+
 def handle_use_template(ancestor: ast.AST, node: ast.AST, track_ids):
     if isinstance(node, ast.Name) and node.id in track_ids:
-        if isinstance(ancestor, ast.Call) and hasattr(ancestor.func, "id") and ancestor.func.id == "format":
+        if (
+            isinstance(ancestor, ast.Call)
+            and hasattr(ancestor.func, "id")
+            and ancestor.func.id == "format"
+        ):
             return get_arg(ancestor), ancestor.keywords
     elif isinstance(node, ast.Attribute) and node.attr == "format":
         if isinstance(ancestor, ast.Call):
             return ancestor.func.value.id, ancestor.keywords
 
     return None, None
+
 
 def walk(tree: ast.AST):
     track_ids = {}
@@ -139,12 +162,13 @@ def walk(tree: ast.AST):
                 else:
                     tid = ancestor.targets[0].id
                 track_ids[tid] = (value, [])
-            else: 
+            else:
                 key, keywords = handle_use_template(ancestor, child, track_ids)
                 if key and keywords and key in track_ids:
                     track_ids[key][1].append([x.arg for x in keywords])
 
     return track_ids
+
 
 def run_checks(text_files, python_files):
     tfiles = []
@@ -155,14 +179,14 @@ def run_checks(text_files, python_files):
 
     for filepath in text_files:
         tfiles.append(check_file(filepath, pyfiles))
-    
+
     spelling_errors = False
     variable_errors = False
     for tfile in tfiles:
         if tfile.typos:
             logger.warning(f"Possible typos in {tfile.filename}: {tfile.typos}")
             spelling_errors = True
-        
+
         if tfile.extra_variables or tfile.missing_variables:
             variable_errors = True
 
@@ -171,14 +195,25 @@ def run_checks(text_files, python_files):
 
     if not variable_errors:
         logger.info("No variable errors found.")
-    
+
 
 def run():
     """Run check command."""
     # All the logic of argparse goes in this function
-    parser = argparse.ArgumentParser(description='Basic prompt checking.')
-    parser.add_argument('directory', type=str, help='the name of the directory to search for prompts', default=".")
-    parser.add_argument('--ignore', type=str, help='a directory or file to exclude', default=None, required=False)
+    parser = argparse.ArgumentParser(description="Basic prompt checking.")
+    parser.add_argument(
+        "directory",
+        type=str,
+        help="the name of the directory to search for prompts",
+        default=".",
+    )
+    parser.add_argument(
+        "--ignore",
+        type=str,
+        help="a directory or file to exclude",
+        default=None,
+        required=False,
+    )
 
     args = parser.parse_args()
     prompt_files = gather(args.directory, args.ignore, ext=".txt")
