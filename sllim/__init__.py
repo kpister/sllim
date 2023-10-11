@@ -302,19 +302,29 @@ def complete(
 ) -> str:
     global prompt_tokens, completion_tokens
 
+    default_params = {
+        "prompt": "<|endoftext|>",
+        "temperature": 1,
+        "top_p": 1,
+        "n": 1,
+        "max_tokens": 16,
+        "logprobs": None,
+        "stop": None,
+        "presence_penalty": 0,
+        "frequency_penalty": 0,
+        "best_of": 1,
+        "logit_bias": None,
+    }
+    kwargs = {
+        k: v
+        for k, v in locals().items()
+        if k in default_params and v != default_params[k]
+    }
+
     response = openai.Completion.create(
         model=model,
-        prompt=prompt,
         max_tokens=max_tokens,
-        temperature=temperature,
-        top_p=top_p,
-        n=n,
-        logprobs=logprobs,
-        stop=stop,
-        presence_penalty=presence_penalty,
-        frequency_penalty=frequency_penalty,
-        best_of=best_of,
-        logit_bias=logit_bias,
+        **kwargs,
     )
     message = response.choices[0].text
     prompt_tokens += response.usage.prompt_tokens
@@ -354,7 +364,7 @@ def estimate(messages_or_prompt: Prompt, model="gpt-3.5-turbo"):
         for text in messages_or_prompt:
             total += len(enc.encode(text["content"]))
 
-    model_cost = {"gpt-3.5-turbo": 0.002, "gpt-4": 0.03, "text-davinci-003": 0.02}
+    model_cost = {"gpt-3.5-turbo": 0.002, "gpt-4": 0.03, "text-davinci-003": 0.02, "text-davinci-002": 0.012}
     return {"tokens": total, "cost": total * model_cost.get(model) / 1000}
 
 

@@ -145,9 +145,9 @@ def handle_use_template(ancestor: ast.AST, node: ast.AST, track_ids):
             and ancestor.func.id == "format"
         ):
             return get_arg(ancestor), ancestor.keywords
-    elif isinstance(node, ast.Attribute) and node.attr == "format":
-        if isinstance(ancestor, ast.Call):
-            return ancestor.func.value.id, ancestor.keywords
+    # elif isinstance(node, ast.Attribute) and node.attr == "format":
+    #     if isinstance(ancestor, ast.Call):
+    #         return ancestor.func.value.id, ancestor.keywords
 
     return None, None
 
