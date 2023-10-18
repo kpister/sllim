@@ -23,6 +23,15 @@ logger.setLevel(logging.INFO)
 
 prompt_tokens, completion_tokens = 0, 0
 
+def user(content: str) -> dict:
+    return dict(role="user", content=content)
+
+def system(content: str) -> dict:
+    return dict(role="system", content=content)
+
+def assistant(content: str) -> dict:
+    return dict(role="assistant", content=content)
+
 
 def load_template(filepath: str) -> tuple[str, str]:
     with open(filepath, "r") as f:
