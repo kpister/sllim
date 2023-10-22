@@ -19,7 +19,6 @@ spell.word_frequency.load_words(["schema", "bulleted"])
 class PromptFile:
     text: str
     filename: str
-    description: str = ""
     typos: list[str] = field(default_factory=list)
     variables: list[str] = field(default_factory=list)
     extra_variables: list[str] = field(default_factory=list)
@@ -87,9 +86,9 @@ def check_usage(tfile: PromptFile, pyfiles: list[PythonFile]):
 
 
 def check_file(filepath, pyfiles: list[PythonFile]):
-    description, prompt = load_template(filepath)
+    prompt = load_template(filepath)
 
-    pfile = PromptFile(text=prompt, description=description, filename=filepath)
+    pfile = PromptFile(text=prompt, filename=filepath)
     check_spelling(pfile)
     load_variables(pfile)
     check_usage(pfile, pyfiles)
@@ -113,16 +112,17 @@ def load_python_file(filepath):
 
 
 def get_arg(node: ast.Call):
-    if node.args:
-        if isinstance(node.args[0], ast.Constant):
-            return node.args[0].value
-        elif isinstance(node.args[0], ast.Name):
-            return node.args[0].id
-    elif node.keywords:
-        if isinstance(node.keywords[0], ast.Constant):
-            return node.keywords[0].value.value
-        elif isinstance(node.keywords[0], ast.Name):
-            return node.keywords[0].id
+    args = node.args or list(map(lambda x: x.value, node.keywords))
+    if args:
+        if isinstance(args[0], ast.Constant):
+            return args[0].value
+        elif isinstance(args[0], ast.Name):
+            return args[0].id
+        elif isinstance(args[0], ast.Call):
+            # Use the last constant in the func call as a heuristic
+            for arg in args[0].args[::-1]:
+                if isinstance(arg, ast.Constant):
+                    return arg.value
     return None
 
 
@@ -145,9 +145,9 @@ def handle_use_template(ancestor: ast.AST, node: ast.AST, track_ids):
             and ancestor.func.id == "format"
         ):
             return get_arg(ancestor), ancestor.keywords
-    # elif isinstance(node, ast.Attribute) and node.attr == "format":
-    #     if isinstance(ancestor, ast.Call):
-    #         return ancestor.func.value.id, ancestor.keywords
+    elif isinstance(node, ast.Attribute) and node.attr == "format":
+        if isinstance(ancestor, ast.Call):
+            return ancestor.func.value.id, ancestor.keywords
 
     return None, None
 
@@ -157,11 +157,7 @@ def walk(tree: ast.AST):
     for ancestor in ast.walk(tree):
         for child in ast.iter_child_nodes(ancestor):
             if value := handle_load_template(child):
-                if isinstance(ancestor.targets[0], ast.Tuple):
-                    tid = ancestor.targets[0].elts[-1].id
-                else:
-                    tid = ancestor.targets[0].id
-                track_ids[tid] = (value, [])
+                track_ids[ancestor.targets[0].id] = (value, [])
             else:
                 key, keywords = handle_use_template(ancestor, child, track_ids)
                 if key and keywords and key in track_ids:

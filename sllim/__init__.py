@@ -33,7 +33,7 @@ def assistant(content: str) -> dict:
     return dict(role="assistant", content=content)
 
 
-def load_template(filepath: str) -> tuple[str, str]:
+def load_template(filepath: str) -> str:
     with open(filepath, "r") as f:
         description, text = f.read().split("\n", 1)
         if not description.startswith("#"):
@@ -42,8 +42,7 @@ def load_template(filepath: str) -> tuple[str, str]:
                 f"File {filepath} does not start with a `# description line`."
             )
             text = description + "\n" + text
-            description = ""
-        return description, text.strip()
+        return text.strip()
 
 
 class Message(TypedDict):
