@@ -633,5 +633,5 @@ def create_function_call(fn: Callable) -> FunctionT:
 
 def format(s: str, **kwargs):
     for key, value in kwargs.items():
-        s = s.replace("{" + key + "}", value)
+        s = s.replace("{" + key + "}", str(value))
     return s
