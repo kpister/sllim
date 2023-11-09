@@ -13,7 +13,9 @@ from uuid import uuid4
 
 import openai
 import tiktoken
-from openai.error import RateLimitError
+from openai import OpenAI
+from openai.types.chat import ChatCompletion
+from openai.types import Completion
 
 
 LOCAL_CACHE = {}
@@ -23,11 +25,20 @@ logger.setLevel(logging.INFO)
 
 prompt_tokens, completion_tokens = 0, 0
 
+client = OpenAI()
+
+
+def configure(api_key=None):
+    client.api_key = api_key
+
+
 def user(content: str) -> dict:
     return dict(role="user", content=content)
 
+
 def system(content: str) -> dict:
     return dict(role="system", content=content)
+
 
 def assistant(content: str) -> dict:
     return dict(role="assistant", content=content)
@@ -77,10 +88,6 @@ API_PARAMS = dict(
 def set_logging(level=logging.INFO):
     logging.basicConfig(level=level)
     logger.setLevel(logging.INFO)
-
-
-def set_key(key):
-    openai.api_key = key
 
 
 def get_token_counts():
@@ -159,14 +166,14 @@ def catch(fn):
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except RateLimitError as e:
+        except openai.RateLimitError as e:
             logger.info("Rate limit error")
             backoff[0] += 1
             if backoff[0] > 9:
                 raise e
             time.sleep(min(2 ** backoff[0], 60))
             return wrapper(*args, **kwargs)
-        except openai.APIError as e:
+        except openai.APIStatusError as e:
             logger.info("API Error: " + str(e))
             backoff[0] += 1
             if e.code and e.code >= 500 and backoff[0] <= 9:
@@ -225,15 +232,16 @@ def chat(
         f"Calling {model_str} using at most {max_tokens_str} with messages: {messages}"
     )
 
-    response = openai.ChatCompletion.create(
+    response: ChatCompletion = client.chat.completions.create(
         messages=messages,
         **kwargs,
     )
+
     message = response.choices[0].message
     prompt_tokens += response.usage.prompt_tokens
     completion_tokens += response.usage.completion_tokens
 
-    if message.get("content"):
+    if message.content:
         logger.info(f"Response: {message.content}")
         return message.content
 
@@ -275,7 +283,7 @@ def call(
         if k in default_params and v != default_params[k]
     }
 
-    response = openai.ChatCompletion.create(
+    response: ChatCompletion = client.chat.completions.create(
         model=model,
         messages=messages,
         max_tokens=max_tokens,
@@ -285,7 +293,7 @@ def call(
     prompt_tokens += response.usage.prompt_tokens
     completion_tokens += response.usage.completion_tokens
 
-    if message.get("function_call"):
+    if message.function_call:
         return message.function_call
 
     raise Exception("No function call found in response. %s" % str(message))
@@ -329,7 +337,7 @@ def complete(
         if k in default_params and v != default_params[k]
     }
 
-    response = openai.Completion.create(
+    response: Completion = client.completions.create(
         model=model,
         max_tokens=max_tokens,
         **kwargs,
@@ -355,11 +363,11 @@ def embed(
     }
     if isinstance(text, list):
         text = [t.replace("\n", " ") for t in text]
-        response = openai.Embedding.create(input=text, **kwargs)["data"]
+        response = client.embeddings.create(input=text, **kwargs)["data"]
         return [x["embedding"] for x in response]
     else:
         text = text.replace("\n", " ")
-        return openai.Embedding.create(input=[text], **kwargs)["data"][0]["embedding"]
+        return client.embeddings.create(input=[text], **kwargs)["data"][0]["embedding"]
 
 
 def estimate(messages_or_prompt: Prompt, model="gpt-3.5-turbo"):
@@ -372,7 +380,12 @@ def estimate(messages_or_prompt: Prompt, model="gpt-3.5-turbo"):
         for text in messages_or_prompt:
             total += len(enc.encode(text["content"]))
 
-    model_cost = {"gpt-3.5-turbo": 0.002, "gpt-4": 0.03, "text-davinci-003": 0.02, "text-davinci-002": 0.012}
+    model_cost = {
+        "gpt-3.5-turbo": 0.002,
+        "gpt-4": 0.03,
+        "text-davinci-003": 0.02,
+        "text-davinci-002": 0.012,
+    }
     return {"tokens": total, "cost": total * model_cost.get(model) / 1000}
 
 
@@ -533,7 +546,7 @@ def thread_map_reduce(template: Prompt, n=8, **kwargs):
             results[idx] = fn(
                 message, **{k: v for k, v in params.items()}, nocache=True
             )
-        except RateLimitError:
+        except openai.RateLimitError:
             results[idx] = ""
 
     num_threads = min(n, max_len)
