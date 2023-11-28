@@ -161,28 +161,29 @@ def cache(fn):
 
 
 def catch(fn):
-    backoff = {0: 0}
+    backoff = 0
 
     def wrapper(*args, **kwargs):
+        nonlocal backoff
         try:
             return fn(*args, **kwargs)
         except openai.RateLimitError as e:
             logger.info("Rate limit error")
-            backoff[0] += 1
-            if backoff[0] > 9:
+            backoff += 1
+            if backoff > 9:
                 raise e
-            time.sleep(min(2 ** backoff[0], 60))
+            time.sleep(min(2**backoff, 60))
             return wrapper(*args, **kwargs)
         except openai.APIStatusError as e:
             logger.info("API Error: " + str(e))
-            backoff[0] += 1
-            if e.code and e.code >= 500 and backoff[0] <= 9:
-                time.sleep(min(2 ** backoff[0], 60))
+            backoff += 1
+            if e.code and int(e.code) >= 500 and backoff <= 9:
+                time.sleep(min(2**backoff, 60))
                 return wrapper(*args, **kwargs)
             else:
                 raise e
         finally:
-            backoff[0] = 0
+            backoff = 0
 
     return wrapper
 
